@@ -64,8 +64,9 @@ export function OrderForm({ config, order }: OrderFormProps) {
   const bill = Math.max(0, subtotal - subsidy)
   const alreadyPaid = order?.total_paid ?? 0
   const outstanding = bill - alreadyPaid
-  const paymentNow = method === LUNAS ? Math.max(0, outstanding) : parseAmount(amountInput)
-  const projectedPaid = alreadyPaid + paymentNow
+  // Create: the input is the initial payment. Edit: the input is the order's new total paid.
+  const projectedPaid = method === LUNAS ? bill : parseAmount(amountInput)
+  const paymentDelta = projectedPaid - alreadyPaid
   const projectedRemaining = Math.max(0, bill - projectedPaid)
   const projectedStatus = getPaymentStatus(bill, projectedPaid)
 
@@ -105,21 +106,21 @@ export function OrderForm({ config, order }: OrderFormProps) {
     setServerError(null)
     const amount = parseAmount(values.payment_amount)
 
-    if (alreadyPaid > bill) {
-      setServerError(
-        `Total pembayaran tercatat (${formatRupiah(alreadyPaid)}) melebihi total tagihan baru (${formatRupiah(bill)}). Hapus sebagian pembayaran di halaman detail terlebih dahulu.`,
-      )
-      return
-    }
-    if (values.payment_method === CICIL && amount > outstanding) {
-      form.setError('payment_amount', {
-        message: `${isEdit ? 'Pembayaran' : 'Pembayaran awal'} tidak boleh melebihi ${formatRupiah(outstanding)}.`,
-      })
-      return
+    if (values.payment_method === CICIL) {
+      if (isEdit && values.payment_amount.trim() === '') {
+        form.setError('payment_amount', { message: 'Isi total yang sudah dibayar (isi 0 jika belum ada pembayaran).' })
+        return
+      }
+      if (amount > bill) {
+        form.setError('payment_amount', {
+          message: `${isEdit ? 'Total dibayar' : 'Pembayaran awal'} tidak boleh melebihi ${formatRupiah(bill)}.`,
+        })
+        return
+      }
     }
 
     try {
-      const saved = await saveOrder.mutateAsync(toSavePayload(values, amount))
+      const saved = await saveOrder.mutateAsync(toSavePayload(values, amount, isEdit ? projectedPaid : undefined))
       setResult(saved)
       window.scrollTo({ top: 0, behavior: 'smooth' })
       toast.success(isEdit ? 'Perubahan pesanan disimpan.' : 'Pesanan berhasil disimpan.')
@@ -151,7 +152,10 @@ export function OrderForm({ config, order }: OrderFormProps) {
   }
 
   const { errors, isSubmitting } = form.formState
-  const paymentLabel = isEdit ? 'Pembayaran tambahan' : 'Jumlah pembayaran awal'
+  const paymentLabel = isEdit ? 'Total sudah dibayar' : 'Jumlah pembayaran awal'
+  const paymentHint = isEdit
+    ? `Tercatat saat ini ${formatRupiah(alreadyPaid)}. Maksimal ${formatRupiah(bill)}. Isi 0 jika belum ada pembayaran.`
+    : `Maksimal ${formatRupiah(bill)}. Kosongkan jika belum ada pembayaran.`
 
   return (
     <form onSubmit={handleFormSubmit} noValidate className="grid gap-5">
@@ -258,13 +262,6 @@ export function OrderForm({ config, order }: OrderFormProps) {
             )}
           </div>
 
-          {isEdit && alreadyPaid > bill && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-destructive" role="alert">
-              Total pembayaran tercatat melebihi total tagihan baru. Hapus sebagian pembayaran di halaman detail pesanan
-              sebelum menyimpan perubahan ini.
-            </p>
-          )}
-
           <FormField label="Metode pembayaran" htmlFor="payment_method" required>
             <NativeSelect id="payment_method" {...form.register('payment_method')}>
               {PAYMENT_METHODS.map((m) => (
@@ -280,7 +277,7 @@ export function OrderForm({ config, order }: OrderFormProps) {
               label={paymentLabel}
               htmlFor="payment_amount"
               error={errors.payment_amount?.message}
-              hint={`Maksimal ${formatRupiah(Math.max(0, outstanding))}. Kosongkan jika belum ada pembayaran.`}
+              hint={paymentHint}
             >
               <Input
                 id="payment_amount"
@@ -291,14 +288,23 @@ export function OrderForm({ config, order }: OrderFormProps) {
               />
             </FormField>
           ) : (
-            <p className="rounded-lg bg-accent px-3 py-2.5 text-sm text-accent-foreground">
-              {outstanding > 0
-                ? `Pembayaran lunas sebesar ${formatRupiah(outstanding)} akan dicatat.`
-                : 'Pesanan sudah lunas, tidak ada pembayaran baru yang dicatat.'}
+            paymentDelta >= 0 && (
+              <p className="rounded-lg bg-accent px-3 py-2.5 text-sm text-accent-foreground">
+                {paymentDelta > 0
+                  ? `Pembayaran lunas sebesar ${formatRupiah(paymentDelta)} akan dicatat.`
+                  : 'Pesanan sudah lunas, tidak ada pembayaran baru yang dicatat.'}
+              </p>
+            )
+          )}
+
+          {isEdit && paymentDelta < 0 && (
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800" role="status">
+              Total dibayar akan dikurangi dari {formatRupiah(alreadyPaid)} menjadi {formatRupiah(projectedPaid)}.
+              Pembayaran terakhir di riwayat akan dikurangi atau dihapus sebesar {formatRupiah(-paymentDelta)}.
             </p>
           )}
 
-          {paymentNow > 0 && (
+          {paymentDelta > 0 && (
             <FormField label="Cara bayar" htmlFor="payment_channel">
               <NativeSelect id="payment_channel" {...form.register('payment_channel')}>
                 {PAYMENT_CHANNELS.map((c) => (
@@ -315,7 +321,10 @@ export function OrderForm({ config, order }: OrderFormProps) {
           </FormField>
 
           <div className="rounded-xl border px-4 py-3">
-            <SummaryRow label="Pembayaran dicatat sekarang" value={formatRupiah(paymentNow)} />
+            <SummaryRow
+              label={isEdit ? 'Perubahan pembayaran' : 'Pembayaran dicatat sekarang'}
+              value={`${paymentDelta < 0 ? '-' : isEdit && paymentDelta > 0 ? '+' : ''}${formatRupiah(Math.abs(paymentDelta))}`}
+            />
             <SummaryRow label="Total dibayar" value={formatRupiah(projectedPaid)} />
             <SummaryRow label="Sisa pembayaran" value={formatRupiah(projectedRemaining)} emphasis />
             <SummaryRow label="Status pembayaran" value={projectedStatus} />
@@ -343,7 +352,7 @@ export function OrderForm({ config, order }: OrderFormProps) {
             <ArrowRight />
           </Button>
         ) : (
-          <Button type="submit" size="lg" className="flex-1" disabled={isSubmitting || (isEdit && alreadyPaid > bill)}>
+          <Button type="submit" size="lg" className="flex-1" disabled={isSubmitting}>
             {isSubmitting ? <Loader2 className="animate-spin" /> : <Send />}
             {isSubmitting ? 'Menyimpan...' : isEdit ? 'Simpan Perubahan' : 'Simpan Pesanan'}
           </Button>

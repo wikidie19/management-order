@@ -117,6 +117,7 @@ export interface SaveOrderPayload {
   notes: string | null
   payment_method: PaymentMethod
   payment_amount: number
+  paid_total?: number
   payment_channel: PaymentChannel
   items: {
     id: string | null

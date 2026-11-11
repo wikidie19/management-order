@@ -88,19 +88,22 @@ export function getDefaultValues(order?: OrderDetail): OrderFormValues {
         sleeve_type: item.sleeve_type,
       })),
     payment_method: order.payment_method,
-    payment_amount: '',
+    payment_amount: String(order.total_paid),
     payment_channel: 'Tunai',
     notes: order.notes ?? '',
   }
 }
 
-export function toSavePayload(values: OrderFormValues, paymentAmount: number): SaveOrderPayload {
+/** `paidTotal` is set when editing; `paymentAmount` is the initial payment when creating. */
+export function toSavePayload(values: OrderFormValues, paymentAmount: number, paidTotal?: number): SaveOrderPayload {
+  const isCicil = values.payment_method === 'Cicil terlebih dahulu'
   return {
     family_name: values.family_name.trim(),
     whatsapp_number: values.whatsapp_number.trim(),
     notes: values.notes.trim() || null,
     payment_method: values.payment_method,
-    payment_amount: values.payment_method === 'Cicil terlebih dahulu' ? paymentAmount : 0,
+    payment_amount: paidTotal === undefined && isCicil ? paymentAmount : 0,
+    ...(paidTotal !== undefined && { paid_total: paidTotal }),
     payment_channel: values.payment_channel,
     items: values.items.map((item) => ({
       id: item.id,
