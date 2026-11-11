@@ -20,6 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ExportButton } from '@/features/export/export-button'
 import { DeleteOrderDialog } from '@/features/orders/components/delete-order-dialog'
 import { OrderListToolbar } from '@/features/orders/components/order-list-toolbar'
+import { OrderSummaryPanel } from '@/features/orders/components/order-summary'
 import { PAGE_SIZE } from '@/features/orders/constants'
 import { useAdminOrders } from '@/features/orders/hooks/use-orders'
 import type { Order } from '@/features/orders/types'
@@ -88,6 +89,8 @@ export function AdminOrdersPage() {
           </Button>
         </div>
       </div>
+
+      <OrderSummaryPanel />
 
       <Card className="gap-0 overflow-hidden py-0">
         <div className="border-b p-3 sm:p-4">

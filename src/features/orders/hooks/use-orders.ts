@@ -4,6 +4,7 @@ import {
   deleteOrder,
   getOrderConfig,
   getOrderDetail,
+  getOrderSummary,
   getPublicOrder,
   listAdminOrders,
   listPublicOrders,
@@ -17,6 +18,7 @@ export const orderKeys = {
   public: (filters: OrderListFilters) => ['orders', 'public', filters] as const,
   admin: (filters: OrderListFilters) => ['orders', 'admin', filters] as const,
   detail: (id: string) => ['orders', 'detail', id] as const,
+  summary: ['orders', 'summary'] as const,
   publicDetail: (orderNumber: string) => ['orders', 'public-detail', orderNumber] as const,
   config: ['order-config'] as const,
   subsidy: (family: string, orderId?: string) => ['order-subsidy', family, orderId ?? null] as const,
@@ -43,6 +45,13 @@ export function useAdminOrders(filters: OrderListFilters) {
     queryKey: orderKeys.admin(filters),
     queryFn: () => listAdminOrders(filters),
     placeholderData: keepPreviousData,
+  })
+}
+
+export function useOrderSummary() {
+  return useQuery({
+    queryKey: orderKeys.summary,
+    queryFn: getOrderSummary,
   })
 }
 

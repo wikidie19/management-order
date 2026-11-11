@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 
 import { DEFAULT_MAX_SHIRTS, PAGE_SIZE } from '../constants'
+import { buildOrderSummary, type SummaryOrderRow } from '../lib/summary'
 import type {
   Order,
   OrderConfig,
@@ -87,6 +88,26 @@ export async function listOrdersForExport(
   }
 
   return all
+}
+
+export async function getOrderSummary() {
+  const batch = 1000
+  const rows: SummaryOrderRow[] = []
+
+  for (let from = 0; ; from += batch) {
+    const { data, error } = await supabase
+      .from('orders')
+      .select(
+        'total_quantity, subtotal, subsidy_amount, total_amount, total_paid, remaining_balance, payment_status, order_items(size, wearer_type, sleeve_type)',
+      )
+      .order('created_at', { ascending: true })
+      .range(from, from + batch - 1)
+    if (error) throw error
+    rows.push(...((data ?? []) as SummaryOrderRow[]))
+    if (!data || data.length < batch) break
+  }
+
+  return buildOrderSummary(rows)
 }
 
 export async function getOrderDetail(id: string) {
